@@ -38,7 +38,7 @@ describe('payout security input validation', () => {
     [null],
   ])('rejects malformed payout input before continuing', async (body) => {
     const req = makeRequest(body);
-    const { res, statusCode } = makeResponse();
+    const { res } = makeResponse();
     const next = vi.fn();
 
     await middleware(req, res, next);
