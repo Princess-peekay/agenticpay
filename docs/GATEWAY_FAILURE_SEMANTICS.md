@@ -20,12 +20,14 @@ half-open until another threshold is reached.
 
 ## Safe fallback and idempotency
 
-Do not automatically replay a payment against another provider solely because
-the response is a definitive decline/failure: the provider may already have
-processed the request. Failover after ambiguous transport errors requires a
-shared idempotency key or reconciliation that can establish the original
-outcome. Keep the same payment identifier and idempotency key across safe
-retries.
+Do not automatically replay a payment against another provider after a provider
+or transport error: the provider may already have processed the request even if its
+response was lost. The gateway manager only falls back automatically when an adapter
+rejects before calling its provider because its circuit is open. Other errors are
+returned to the caller for reconciliation. If an application adds retry after an
+ambiguous outcome, it must first reconcile the original transaction or use a provider
+contract that guarantees cross-gateway deduplication. Keep the same payment identifier
+and idempotency key across safe retries.
 
 ## Verification
 
