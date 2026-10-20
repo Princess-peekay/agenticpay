@@ -52,6 +52,15 @@ The asset allowlist and the amount ceiling are enforced **in the engine as well 
 route**, so a caller that reaches `PayoutEngine` directly cannot pay an unlisted asset or
 an unbounded amount.
 
+## Request validation before fraud accounting
+
+Payout security middleware rejects missing or malformed merchant identifiers and
+amounts before recording an attempt or running velocity checks. Amounts must be finite,
+strictly positive, and no greater than 1,000,000. This prevents invalid values from
+poisoning daily amount totals or bypassing fraud checks. When forwarding headers are
+used, only the first `X-Forwarded-For` address is considered; deployments must only trust
+forwarded headers from their configured reverse proxy.
+
 ## Rate limiting
 
 The payouts router carries its own ceilings **on top of** the global `/api` limiter
