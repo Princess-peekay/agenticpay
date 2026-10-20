@@ -100,14 +100,40 @@ const attemptStore = new PayoutAttemptStore();
 export function payoutSecurityMiddleware(config: SecurityConfig = DEFAULT_SECURITY_CONFIG) {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const { merchantId, amount, asset } = req.body;
-      const ipAddress = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || 'unknown';
+      const { merchantId, amount } = req.body ?? {};
+      const numericAmount = typeof amount === 'number' ? amount : Number(amount);
+
+      // Reject malformed payout inputs before recording attempts or running fraud
+      // checks. In particular, NaN/Infinity/negative values must never enter the
+      // velocity totals, and an untrusted forwarded-for chain is not an IP address.
+      if (
+        typeof merchantId !== 'string' ||
+        merchantId.trim().length === 0 ||
+        merchantId.length > 128 ||
+        amount === null ||
+        amount === undefined ||
+        (typeof amount !== 'number' && typeof amount !== 'string') ||
+        (typeof amount === 'string' && amount.trim() === '') ||
+        !Number.isFinite(numericAmount) ||
+        numericAmount <= 0 ||
+        numericAmount > 1_000_000
+      ) {
+        res.status(400).json({
+          error: { code: 'INVALID_PAYOUT_REQUEST', message: 'A valid merchantId and positive payout amount are required.' },
+        });
+        return;
+      }
+
+      const forwardedFor = req.headers['x-forwarded-for'];
+      const ipAddress = (typeof forwardedFor === 'string' ? forwardedFor.split(',')[0].trim() : undefined)
+        || req.socket.remoteAddress
+        || 'unknown';
       const userAgent = req.headers['user-agent'] || 'unknown';
 
-      // Record attempt
+      // Record only validated attempts so rejected input cannot poison daily limits.
       const attempt: PayoutAttempt = {
         merchantId,
-        amount: Number(amount),
+        amount: numericAmount,
         timestamp: new Date(),
         ipAddress,
         userAgent,
