@@ -112,7 +112,7 @@ export abstract class BaseGatewayAdapter implements IGatewayAdapter {
       if (this.shouldAttemptReset()) {
         this.circuitState = CircuitState.HalfOpen;
       } else {
-        throw new Error(
+        throw new GatewayCircuitOpenError(
           `Gateway ${this.config.gatewayType} circuit is open. Try again later.`,
         );
       }
@@ -269,6 +269,17 @@ export abstract class BaseGatewayAdapter implements IGatewayAdapter {
 }
 
 /**
+ * Indicates that a gateway rejected the request before invoking its provider.
+ * This is the only failure class that permits automatic cross-gateway fallback.
+ */
+export class GatewayCircuitOpenError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'GatewayCircuitOpenError';
+  }
+}
+
+/**
  * Gateway manager with failover support
  */
 export class GatewayManager {
@@ -315,7 +326,15 @@ export class GatewayManager {
         };
       } catch (error) {
         lastError = error instanceof Error ? error : new Error('Unknown error');
-        // Continue to next gateway
+
+        // Provider/transport errors can be ambiguous: the provider may have charged
+        // even when its response was lost. Do not retry on another gateway unless
+        // the failure is known to have happened before a provider call (open circuit).
+        if (!(error instanceof GatewayCircuitOpenError)) {
+          throw lastError;
+        }
+        // An open circuit rejects before executePayment, so trying another adapter
+        // cannot duplicate a payment that this adapter may have processed.
       }
     }
 
